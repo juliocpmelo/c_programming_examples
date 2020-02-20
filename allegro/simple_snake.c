@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 //fps = frames per second = atualizacoes por segundo
-#define FPS 5
+#define FPS 30
 
 /*largura e altura d atela em pixels*/
 #define LARGURA_TELA 640
@@ -291,6 +291,7 @@ int main(void){
 	}
 
 	int count = 0;
+	double currentTime, lastUpdateTime=-1, lastFoodTime=-4;
 	while(!sair){
 		ALLEGRO_EVENT evento;
 		al_wait_for_event(fila_eventos, &evento);
@@ -299,12 +300,6 @@ int main(void){
 		//se o tipo do evento for o disparo de um timer
 		if(evento.type == ALLEGRO_EVENT_TIMER){
 			desenha = 1;
-			move(&jogador, last_evt);
-			check_collision(&b, &jogador);
-			if(count == 0){
-				spawn_food(&b,&jogador);
-			}
-			count = (count + 1)%(FPS*3); //cria uma comida a cada 3s
 		}
 		//se o evento for pressionar uma tecla
 		if (evento.type == ALLEGRO_EVENT_KEY_DOWN){
@@ -323,6 +318,18 @@ int main(void){
 		}
 		else if(evento.type == ALLEGRO_EVENT_DISPLAY_CLOSE) {
 			sair = 1;
+		}
+
+		/*atualizacao dos estados do jogador e do mapa*/
+		currentTime = al_get_time();
+		if(currentTime - lastUpdateTime > 0.1){//atualiza a cobrinha a cada 0.1s
+			move(&jogador, last_evt);
+			check_collision(&b, &jogador);
+			lastUpdateTime = currentTime;
+		}
+		if(currentTime - lastFoodTime > 3){//cria uma comida a cada 3s
+			spawn_food(&b,&jogador);
+			lastFoodTime = currentTime;
 		}
 
 		/* -- ATUALIZA TELA -- */
