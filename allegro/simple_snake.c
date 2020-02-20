@@ -6,10 +6,52 @@
 
 //fps = frames per second = atualizacoes por segundo
 #define FPS 5
+
+/*largura e altura d atela em pixels*/
 #define LARGURA_TELA 640
 #define ALTURA_TELA 480
 
+
+/*tamanho de discretizacao do mapa, o mapa é dividio em quadrados MAP_STEPxMAP_STEP*/
 #define	MAP_STEP 20
+
+/*um segmento da cobrinha, o jogador é composto por uma lista desses segmentos*/
+typedef struct segment_t{
+	int x, y;
+	int w, h;
+}segment;
+
+/*comida*/
+typedef struct food_t{
+	int x, y;
+	int w, h;
+}food;
+
+/*representa o estado "jogador", é composto por uma lista de segmentos(segs)
+  step representa o quao rápido o jogador navega no tabuleiro
+  n_segs o tamanho da lista de segmentos
+  seg_increase e usado na logica de jogo para incrementar o tamanho da cobrinha
+  ant_direction é usado para guardar a ultima direcao do movimento do jogador
+*/
+typedef struct player_t{
+	int step;
+	int n_segs;
+	int seg_increase;
+	int ant_direction;
+	segment *segs;
+}player;
+
+/*representa o estado do "tabuleiro", é composto por uma lista de comidas (food_list) 
+  food_list_max_len é usado para armazenar a quantidade maxima de comidas que o tabuleiro pode ter 
+  food_list_len é usado para guardar o tamanho atual da lista de comidas
+*/
+typedef struct board_t{
+	food *food_list;
+	int food_list_max_len;
+	int food_list_len;
+}board;
+
+
 
 ALLEGRO_DISPLAY *janela = NULL;
 ALLEGRO_EVENT_QUEUE *fila_eventos = NULL;
@@ -32,6 +74,8 @@ void error_msg(char *text){
 			text,NULL,ALLEGRO_MESSAGEBOX_ERROR);
 }
 
+
+/*cria estruturas básicas*/
 int inicializar(){
 	if (!al_init()){
 		error_msg("Falha ao inicializar a Allegro");
@@ -82,39 +126,19 @@ int inicializar(){
 	return 1;
 }
 
-/*a snake segment, player must hold a list of these*/
-typedef struct segment_t{
-	int x, y;
-	int w, h;
-}segment;
-
-/*food spawns at the board every second*/
-typedef struct food_t{
-	int x, y;
-	int w, h;
-}food;
-
-/*struct player, representa a posicao do "jogador"
-  por um retângulo na tela
-*/
-typedef struct player_t{
-	int step;
-	int n_segs;
-	int seg_increase;
-	segment *segs;
-}player;
-
-typedef struct board_t{
-	food *food_list;
-	int food_list_max_len;
-	int food_list_len;
-}board;
-
+/*move o jogador no tabuleiro para uma direcao especificada*/
 void move(player *p, int direction){
-	printf("%d\n",p->n_segs);
+	if(p->ant_direction == ALLEGRO_KEY_UP && direction == ALLEGRO_KEY_DOWN ||
+	   p->ant_direction == ALLEGRO_KEY_DOWN && direction == ALLEGRO_KEY_UP)
+		direction = p->ant_direction; //ignora se o jogador tentar fazer a cobrina andar de "ré"
+
+	if(p->ant_direction == ALLEGRO_KEY_LEFT && direction == ALLEGRO_KEY_RIGHT ||
+	  p->ant_direction == ALLEGRO_KEY_RIGHT && direction == ALLEGRO_KEY_LEFT)
+		direction = p->ant_direction; //ignora se o jogador tentar fazer a cobrina andar de "ré"
+	
 	switch(direction){
 		case ALLEGRO_KEY_UP:
-			for(int i=1; i<p->n_segs - p->seg_increase; i++){
+			for(int i=p->n_segs - p->seg_increase; i>0; i--){
 				p->segs[i].x = p->segs[i-1].x;
 				p->segs[i].y = p->segs[i-1].y;
 			}
@@ -126,7 +150,7 @@ void move(player *p, int direction){
 			}
 			break;
 		case ALLEGRO_KEY_DOWN:
-			for(int i=1; i<p->n_segs - p->seg_increase; i++){
+			for(int i=p->n_segs - p->seg_increase; i>0; i--){
 				p->segs[i].x = p->segs[i-1].x;
 				p->segs[i].y = p->segs[i-1].y;
 			}
@@ -138,7 +162,7 @@ void move(player *p, int direction){
 			}
 			break;
 		case ALLEGRO_KEY_LEFT:
-			for(int i=1; i<p->n_segs - p->seg_increase; i++){
+			for(int i=p->n_segs - p->seg_increase; i>0; i--){
 				p->segs[i].x = p->segs[i-1].x;
 				p->segs[i].y = p->segs[i-1].y;
 			}
@@ -150,7 +174,7 @@ void move(player *p, int direction){
 			}
 			break;
 		case ALLEGRO_KEY_RIGHT:
-			for(int i=1; i<p->n_segs - p->seg_increase; i++){
+			for(int i=p->n_segs - p->seg_increase; i>0; i--){
 				p->segs[i].x = p->segs[i-1].x;
 				p->segs[i].y = p->segs[i-1].y;
 			}
@@ -162,13 +186,29 @@ void move(player *p, int direction){
 			}
 			break;
 	}
-	if(p->seg_increase > 0){
+	if(p->seg_increase > 0 )
 		p->seg_increase--;
-	}
+	p->ant_direction = direction;
+
 }
 
+/*checa se uma posicao é valida para comida i.e. nao tem cobrinha ou outra comida no lugar*/
+int check_valid(food *f, player *jogador, board *b){
+	for(int i=0; i<b->food_list_len; i++){
+		if(b->food_list[i].x == f->x && b->food_list[i].y == f->y) //comida em cima de outra
+			return 0;
+	}
+	for(int i=0; i<jogador->n_segs; i++){
+		if(jogador->segs[i].x == f->x && jogador->segs[i].y == f->y) //comida dentro da cobrinha
+			return 0;
+	}
+	return 1;
+}
+
+
 /*cria uma comida em uma localizacao aleatoria do tabuleiro*/
-void spawn_food(board *b){
+void spawn_food(board *b, player *jogador){
+	/*se a lista for ter um overflow, aumenta o tamanho da lista de comidas*/	
 	if(b->food_list_max_len < b->food_list_len + 1){
 		b->food_list = realloc(b->food_list, (b->food_list_max_len + 5) * sizeof(food));
 		b->food_list_max_len += 5;
@@ -177,6 +217,11 @@ void spawn_food(board *b){
 	food f = {0,0,MAP_STEP,MAP_STEP};
 	f.x = rand()%(LARGURA_TELA/MAP_STEP) * MAP_STEP;
 	f.y = rand()%(ALTURA_TELA/MAP_STEP) * MAP_STEP;
+	
+	while(!check_valid(&f, jogador, b)){
+		f.x = rand()%(LARGURA_TELA/MAP_STEP) * MAP_STEP;
+		f.y = rand()%(ALTURA_TELA/MAP_STEP) * MAP_STEP;
+	}
 	b->food_list[b->food_list_len] =f;
 	b->food_list_len += 1;
 }
@@ -224,7 +269,7 @@ int main(void){
 	int last_evt = ALLEGRO_KEY_UP;
 
 
-	player jogador = {MAP_STEP, 3, 0};
+	player jogador = {MAP_STEP, 3, 0, last_evt};
 	jogador.segs = malloc(sizeof(segment)*jogador.n_segs);
 	/*posicao inicial do jogador*/
 	jogador.segs[0].x = (3+rand()%3)*MAP_STEP;
@@ -257,9 +302,9 @@ int main(void){
 			move(&jogador, last_evt);
 			check_collision(&b, &jogador);
 			if(count == 0){
-				spawn_food(&b);
+				spawn_food(&b,&jogador);
 			}
-			count = (count + 1)%FPS;
+			count = (count + 1)%(FPS*3); //cria uma comida a cada 3s
 		}
 		//se o evento for pressionar uma tecla
 		if (evento.type == ALLEGRO_EVENT_KEY_DOWN){
